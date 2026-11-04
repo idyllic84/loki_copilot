@@ -16,6 +16,11 @@ function isAlwaysThinking(modelId) {
 	return modelId.includes("5.5") || modelId.includes("5-5");
 }
 
+/** Display only the upstream-advertised total window, without rounding or fallback estimates. */
+function formatContextWindowLimit(value) {
+	return Number.isSafeInteger(value) && value > 0 ? value.toLocaleString("en-US") : "unknown";
+}
+
 function toUsdPerMillion(billing) {
 	if (!billing) return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 	const factor = CREDIT_TO_USD * 1_000_000;
@@ -190,7 +195,7 @@ export function buildCopilotProvidersAndModels(catalog, baseUrl, options = {}) {
 			provider: item.provider,
 			wireModel: item.id,
 			modelId: item.id,
-			name: `${item.name} [Loki]`,
+			name: `${item.name} [Loki] · ctx=${formatContextWindowLimit(item.capabilities?.limits?.max_context_window_tokens)}`,
 			maxContextWindowTokens: item.contextWindow,
 			maxPromptTokens,
 			maxOutputTokens: item.maxTokens,
@@ -204,7 +209,7 @@ export function buildCopilotProvidersAndModels(catalog, baseUrl, options = {}) {
 export function formatModelsTable(models, baseUrl) {
 	const lines = [`Loki Live Models (${baseUrl}) — ${models.length} models:`];
 	for (const m of models) {
-		const ctx = `${Math.round(m.contextWindow / 1000)}K`;
+		const ctx = formatContextWindowLimit(m.capabilities?.limits?.max_context_window_tokens);
 		const maxOut = `${Math.round(m.maxTokens / 1000)}K`;
 		const cost = `$${m.cost.input.toFixed(2)}/$${m.cost.output.toFixed(2)}`;
 		const selectId = `${m.provider}/${m.id}`;

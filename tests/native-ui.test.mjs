@@ -77,6 +77,7 @@ test("native /model lists dynamic Loki models and supports Low through Max", { s
 		}
 		const selectedLine = () => text().split("\n").find((line) => /^\s*❯\s+/.test(line) && line.includes(target)) || "";
 		assert.ok(selectedLine(), "The target must be an actual selectable row, not only a timeline message.");
+		assert.match(selectedLine(), /ctx=[1-9]\d{0,2}(?:,\d{3})*/, "The native row must show the upstream total context-window limit.");
 		for (let i = 0; i < 6; i++) { child.write("\x1b[D"); await delay(120); }
 		await waitFor(() => selectedLine().includes("Low"), "Low reasoning");
 		for (const level of ["Medium", "High", "Extra High", "Max"]) {
