@@ -205,21 +205,6 @@ session = await joinSession({
 				}
 
 				saveExtensionConfig({ endpoint: nextUrl });
-				if (process.platform === "win32") {
-					try {
-						const { execFile } = await import("node:child_process");
-						execFile(
-							"powershell.exe",
-							[
-								"-NoProfile",
-								"-Command",
-								`[Environment]::SetEnvironmentVariable("COPILOT_LOKI_BASE_URL", $env:NEXT_LOKI_URL, "User")`,
-							],
-							{ env: { ...process.env, NEXT_LOKI_URL: nextUrl }, windowsHide: true },
-							() => {},
-						);
-					} catch {}
-				}
 				try {
 					const catalog = await syncProvidersAndModels(nextUrl);
 					await session.log(

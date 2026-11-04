@@ -13,7 +13,7 @@ export const LOKI_OPENAI_PROVIDER = "loki-openai";
 export const PROD_UPSTREAM = "https://loki.delve.office.com/api/v1/llmapi";
 export const MSIT_UPSTREAM = "https://msit.loki.delve.office.com/api/v1/llmapi";
 export const DF_UPSTREAM = "https://df.loki.delve.office.com/api/v1/llmapi";
-export const DEFAULT_UPSTREAM = (process.env.LOKI_UPSTREAM || PROD_UPSTREAM).replace(/\/+$/, "");
+export const DEFAULT_UPSTREAM = PROD_UPSTREAM;
 
 /** M365 Copilot desktop client ID (registered for WAM broker auth). */
 export const CLIENT_ID = "0ec893e0-5785-4de6-99da-4ed124e5296c";
@@ -64,7 +64,7 @@ export function formatEndpointLabel(url) {
 }
 
 export function getStateDir() {
-	return process.env.LOKI_COPILOT_HOME || join(homedir(), ".copilot", "loki-state");
+	return join(homedir(), ".copilot", "loki-state");
 }
 
 export function getConfigPath() {

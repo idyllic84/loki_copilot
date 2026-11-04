@@ -112,23 +112,5 @@ export async function acquireWamToken(mode, loginHint, signal) {
 }
 
 export async function getValidToken(signal) {
-	if (process.env.LOKI_TOKEN?.trim()) {
-		return {
-			accessToken: process.env.LOKI_TOKEN.trim(),
-			expiresAt: Math.floor(Date.now() / 1000) + 3600,
-			account: "env:LOKI_TOKEN",
-		};
-	}
 	return acquireWamToken("silent", undefined, signal);
-}
-
-if (import.meta.main) {
-	getValidToken()
-		.then((tok) => {
-			process.stdout.write(`${tok.accessToken}\n`);
-		})
-		.catch((err) => {
-			process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
-			process.exit(1);
-		});
 }
