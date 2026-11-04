@@ -2,25 +2,17 @@
 
 面向 **GitHub Copilot CLI** 的 **Microsoft Entra（Loki LLM API）扩展**。
 
-扩展通过 `@github/copilot-sdk/extension` 的 `joinSession()` 加入当前会话，使用 Windows WAM 获取企业 M365 Entra 令牌，实时发现 Loki 模型，并通过 SDK 注册模型提供方、自定义命令和工具。无需单独运行代理服务。
+使用企业 M365 身份通过 Windows WAM 获取令牌，实时发现 Loki 模型，并加入 Copilot **原生 `/model` 选单**。在选单里选择模型、用左右键调整 thinking/reasoning level，无需单独的模型选择命令或代理服务。
 
-> 本项目不是微软或 GitHub 的官方产品。使用需要已有 Loki 访问权限；安装扩展不会授予服务权限。请求以你的企业身份发送，用量和数据处理受上游服务及组织政策约束。
+> 本项目不是微软或 GitHub 的官方产品。需要企业账号已有 Loki 访问权限；安装扩展不会授予权限。请求以你的身份发送，用量和数据处理受上游服务及组织政策约束。
 
 ## 一、主要功能
 
-- **独立认证**：通过 Windows WAM 静默获取及刷新令牌；需要交互授权或切换账号时使用 `/loki-login`。辅助进程使用 `windowsHide: true` 避免控制台窗口，系统登录或账号选择界面仍可能出现。
-- **默认生产环境**：未配置时固定使用 `prod`：`https://loki.delve.office.com/api/v1/llmapi`。显式切换后记住选择，后续启动使用已保存的环境。
-- **实时模型发现**：从当前环境的 `GET /models` 获取模型，通过增量 BYOK 注册 `loki-anthropic/<模型 ID>` 和 `loki-openai/<模型 ID>`，分别使用 Anthropic Messages 和 OpenAI Responses 协议。可用模型以上游实时返回为准。
-- **云端配额查询**：通过 `GET /quota` 展示当前周期用量和配额状态。
-- **网页搜索与抓取**：提供独立的 `loki_web_search` 和 `loki_web_browse` 工具，不自动组合搜索与抓取。
-
-### 配置与认证隔离
-
-- 插件的 endpoint、账号和令牌缓存保存在 `~/.copilot/loki-state/config.json`，不要公开或提交该文件。
-- 插件不读取 `COPILOT_LOKI_*`、`COPILOT_PROVIDER_*`、`LOKI_UPSTREAM` 或 `LOKI_TOKEN` 来决定自己的上游地址或认证，也不写入这些用户环境变量。
-- 不要求切换 Copilot 的 GitHub 账号，不用 Copilot 内置的 Entra 登录代替插件 WAM 登录。
-- 这不代表能隔离整个宿主：Copilot CLI 自身的环境、权限、组织策略及 SDK 版本仍可能影响扩展的加载和运行。
-- 仅向可信 endpoint 发送请求；自定义地址会接收你的令牌和请求内容。
+- **原生选模型与 thinking 档位**：输入 `/model`，搜索 `loki`，使用上下键选模型、左右键调整推理强度，再按 Enter。支持档位来自模型目录，不统一硬编码成固定列表。
+- **实时模型发现**：启动、登录、刷新或切换环境时请求 `GET /models`，使用 SDK 的 `providers`、`models` 和会话级 provider API 注册，不向 `providers.json` 写入模型快照。
+- **独立 WAM 认证**：按需静默获取及刷新令牌，不要求切换 Copilot 的 GitHub 账号，不依赖 `COPILOT_LOKI_*`、`COPILOT_PROVIDER_*`、`LOKI_TOKEN` 或 `LOKI_UPSTREAM`。
+- **默认 prod**：未配置时使用 `https://loki.delve.office.com/api/v1/llmapi`。显式切换至 msit、df 或可信自定义地址后记住选择。
+- **实时配额与网页工具**：查询 `GET /quota`，并提供相互独立的网页搜索、网页正文抓取工具。
 
 ## 二、安装与更新
 
@@ -29,8 +21,8 @@
 | 项目 | 要求 |
 |---|---|
 | 操作系统 | Windows，支持 WAM Broker |
-| Node.js | 22 或更高版本；建议使用当前 LTS |
-| Copilot CLI | 需支持 Extension、增量 BYOK 和令牌回调；本地核对版本为 `1.0.106-8`，不保证所有较早版本支持相同接口 |
+| Node.js | 22 或更高版本；建议当前 LTS |
+| Copilot CLI | 需支持 Extension 和实验性多 Provider SDK；原生选单测试版本为 **1.0.106-8** |
 | 企业账号 | 已在本机登录，并具备 Loki 服务访问权限 |
 
 ### 首次安装
@@ -42,13 +34,11 @@ npm install
 npm run install:user
 ```
 
-安装脚本将运行副本复制到 `~/.copilot/extensions/loki`，与开发目录分离，不创建指向源码目录的链接。安装位置可通过 `COPILOT_HOME` 或 `LOKI_COPILOT_EXT_DIR` 调整；这些是安装路径选项，不参与服务认证或 endpoint 选择。
+安装脚本将运行副本复制到 `~/.copilot/extensions/loki`，与源码开发目录隔离。不修改 Copilot 二进制、不设置认证环境变量，也不写 `providers.json`。
 
-启动 `copilot` 后检查扩展加载状态。已有会话可尝试 `/extensions reload`，不支持该命令的版本请重启 CLI。
+启动 Copilot，按宿主提示允许加载你信任的 Loki 扩展。若已有会话，执行 `/extensions reload`；不支持该命令的版本请退出并重启。**仅更新源码不会更新已安装副本**。
 
-### 更新
-
-在源码目录中执行：
+### 更新已有安装
 
 ```powershell
 git pull --ff-only
@@ -57,50 +47,47 @@ npm test
 npm run install:user
 ```
 
-然后重新加载扩展或重启 Copilot CLI。只更新源码不会自动更新独立安装副本。
+然后重新加载扩展或重启 Copilot。
+
+安装位置可通过 `COPILOT_HOME` 或 `LOKI_COPILOT_EXT_DIR` 调整；这些是安装路径选项，不参与服务认证或 endpoint 选择。不要同时保留同名的项目级旧扩展，它可能优先于用户级安装副本。
 
 ## 三、日常使用
 
-### 最短使用流程
+### 使用原生 `/model`
+
+1. 等待扩展提示动态模型已加载。首次授权或静默认证失败时，执行 `/loki-login`。
+2. 输入 **`/model`** 打开 Copilot 原生模型选单。
+3. 在搜索框输入 **`loki`**。模型名称带有 **`[Loki]`**，可能位于 `Recent models`、`New models` 或其他分组，不一定有单独的 Loki Provider 分组。
+4. **上下键**选择模型，**左右键**调整 `Reasoning` 档位，按 **Enter** 确认。
+
+例如，测试中 Claude Opus 5.5 的可选档位为 `Low / Medium / High / Extra High / Max`；实际值由上游目录决定。模型未声明推理档位时，不显示可调 reasoning 控件。
+
+也可使用原生命令直接指定 ID：
 
 ```text
-/loki-login       # 首次授权或静默认证失败时使用；已有有效凭证时通常不需要
-/loki-model       # 在支持交互表单的宿主中打开模型选择框
+/model loki-anthropic/claude-opus-5.5
+/model loki-openai/gpt-61-sol
 ```
 
-默认使用 prod，不需要先切换环境，也不需要切换 Copilot 登录账号。指定模型的示例：
+模型 ID 会随服务变动，使用 `/loki-models` 查询当前目录。
 
-```text
-/loki-model claude-opus-5.5
-/loki-model gpt-61-sol
-```
+**1.1.0 已删除 `/loki-model` 命令和 `loki_switch_model` 工具**，模型选择与推理强度统一交给宿主原生选单。
 
-示例模型可能随服务变动；使用 `/loki-models` 查询当前可用 ID。
-
-### 命令一览
+### 扩展命令
 
 | 命令 | 作用 |
 |---|---|
 | `/loki-login` | 使用 WAM 登录，随后同步模型 |
 | `/loki-login user@example.com` | 指定企业账号 |
 | `/loki-login picker` | 打开 Windows 账号选择器 |
+| `/loki-models` | 实时拉取当前环境模型并同步到会话，随后重新打开 `/model` 查看 |
+| `/loki-models df` | 只查询另一个环境的目录，不切换当前环境 |
 | `/loki-endpoint` | 在支持交互表单的宿主中选择环境，否则显示当前环境及用法 |
-| `/loki-endpoint prod` | 切回默认生产环境 |
-| `/loki-endpoint msit` 或 `/loki-endpoint df` | 显式切换至其他环境并保存 |
-| `/loki-model` | 在支持交互表单的宿主中选择模型，否则显示当前模型 |
-| `/loki-model df/claude-opus-5.5` | 显式切换环境及模型 |
-| `/loki-models` | 查询当前环境的实时模型目录 |
+| `/loki-endpoint prod` | 切回默认生产环境并刷新模型 |
+| `/loki-endpoint msit` 或 `/loki-endpoint df` | 切换环境并保存选择 |
 | `/loki-usage` | 查询当前环境的云端配额 |
 
-### 与内置 `/login`、`/model` 的关系
-
-**模型提供方注册与登录菜单扩展是不同的接口。**
-
-- **内置 `/login`**：本地核对的 SDK 没有向该菜单注册自定义认证提供方的 Extension 接口。`accounts.login` RPC 只能调用宿主已有的登录流程；宿主 SDK 的 `CopilotClientOptions.entra.tokenProvider` 也不是普通 Extension 的注册入口。因此本扩展保留 `/loki-login`，不覆盖内置 `/login`。
-- **模型提供方**：SDK 支持 `joinSession({ providers, models })` 和会话级 provider RPC 注册模型，以及按请求调用 `bearerTokenProvider` 获取凭证。本项目使用这些接口，不使用环境变量桥接。
-- **内置 `/model`**：注册后的模型使用如 `loki-anthropic/claude-opus-5.5` 的选择 ID。可尝试 `/model loki-anthropic/claude-opus-5.5`，但普通 Extension 在不同 CLI 版本的原生菜单中是否完整显示、刷新和可选，尚未完成交互式端到端验证。**不能仅凭 SDK 注册成功就承诺原生菜单体验完全可用**；目前保留 `/loki-model` 作为明确的选择入口。
-
-安装不修改 Copilot 二进制、不接管账号系统，也不通过隐藏环境变量模拟上述能力。
+切换环境后，如果当前 Loki 模型仍可用，会尝试保留模型和已选推理档位。若新环境不支持该模型或档位，请重新从 `/model` 选择。
 
 ### 工具
 
@@ -108,22 +95,61 @@ npm run install:user
 |---|---|
 | `loki_web_search` | 搜索标题、URL 和日期；支持语言、地区和结果数量 |
 | `loki_web_browse` | 抓取指定网页的文本内容，最多 20,000 字符；可能截断，不保证完整原文 |
-| `loki_models` | 获取实时模型目录 |
-| `loki_quota` | 获取云端配额 |
-| `loki_switch_model` | 修改当前会话模型，也可显式切换环境；不是只读查询 |
+| `loki_models` | 查询实时模型目录 |
+| `loki_quota` | 查询云端配额 |
 
-当前这些工具设置了 `skipPermission: true`。搜索会发送查询，抓取会发送 URL，模型调用会发送会话内容；不要向外部服务提供未获授权的数据，网页内容也应视为不可信输入。
+这些查询工具设置了 `skipPermission: true`。搜索会发送查询，抓取会发送 URL；网页内容应视为不可信输入。
 
-## 四、测试与验证范围
+## 四、配置、隐私与边界
+
+- endpoint、账号和令牌缓存保存在 `~/.copilot/loki-state/config.json`，不要公开或提交该文件。辅助进程使用 `windowsHide: true` 避免控制台窗口；系统登录或账号选择界面仍可能出现。
+- 自定义 endpoint 会接收你的令牌和请求内容，只配置可信地址。
+- 插件不读写 Copilot 的 Provider 认证环境变量，但宿主自身的权限、组织策略、扩展启用状态及 SDK 版本仍可能影响运行。
+- **内置 `/login` 暂无已确认的自定义认证提供方注册接口**，因此保留 `/loki-login`，不覆盖宿主登录菜单。
+- `Context` 列展示由宿主决定，未声明上下文档位的 BYOK 模型可能显示 `—`；这不等于请求被限制到小窗口。注册配置包含模型上下文和输出限制，不虚构上下文档位。
+- 多 Provider SDK 接口仍属实验性。当前验证版本上的可用行为，不代表所有 Copilot 版本都兼容。
+
+## 五、测试
+
+### 离线单元测试
 
 ```powershell
 npm test
 ```
 
-单元测试使用模拟 HTTP 响应，覆盖模型转换、请求头、认证字段序列化、配额和网页工具客户端；不验证完整的 Copilot TUI 或真实模型推理链路。
+使用模拟响应，覆盖动态模型增删、能力映射、上游推理档位、请求头、认证序列化和查询工具。原生 UI 测试默认跳过。
 
-本地曾验证模型目录、配额工具及模型切换工具返回成功，但**切换工具成功或模型自述不等同于后续推理请求已完整验证**。原生菜单、切换后的新一轮推理及长时间令牌续期仍需进一步端到端验证。
+### 原生选单测试（需显式开启）
 
-## 五、卸载
+先安装扩展、准备有效 WAM 登录态，然后执行：
+
+```powershell
+$env:LOKI_COPILOT_TUI_TEST = "1"
+npm run test:copilot
+```
+
+测试通过无可见控制台窗口的 ConPTY 打开真实 Copilot，搜索并选中 Loki 模型，验证 `Low → Medium → High → Extra High → Max`、确认 High、刷新动态目录后保留档位，并检查 `providers.json` 未改变。只对该次扩展启动确认权限，不保存全局授权。
+
+可选地设置 `COPILOT_TEST_CLI` 指定 Copilot 可执行文件或官方 JavaScript 入口；设置 `LOKI_TEST_MODEL_LABEL` 选择其他模型名称。测试默认目标为 `Claude Opus 5.5 [Loki]`，目标需要支持上述五个档位。测试会创建正常的 Copilot 会话记录。
+
+额外启用真实请求验证会产生少量服务用量：
+
+```powershell
+$env:LOKI_COPILOT_LIVE_TEST = "1"
+npm run test:copilot
+```
+
+**已验证**：Copilot CLI 1.0.106-8、prod 环境下，Claude Opus 5.5 和 GPT-6.1 Sol 均通过原生选单选择、推理档位调整、目录热同步及后续真实请求测试。未将长时间令牌续期或所有模型/CLI 版本视为已验证。
+
+## 六、官方接口依据
+
+- [Copilot CLI 选择模型及推理档位](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/choose-a-model)
+- [Copilot 官方模型能力字段](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference#providersjson)：参考 `capabilities.supports.reasoning_effort`、`adaptive_thinking`、`capabilities.limits` 的含义；本项目不写该配置文件。
+- [Extension 接口](https://github.com/github/copilot-sdk/blob/main/nodejs/docs/extensions.md)
+- [SDK 模型定义](https://github.com/github/copilot-sdk/blob/main/nodejs/src/types.ts)、[会话级 provider API](https://github.com/github/copilot-sdk/blob/main/nodejs/src/generated/rpc.ts)
+
+实现不依赖反编译、私有 NAPI 或修改宿主选单。
+
+## 七、卸载
 
 关闭 Copilot CLI，删除用户扩展目录 `~/.copilot/extensions/loki`。如需清除插件保存的凭证和 endpoint，再删除 `~/.copilot/loki-state`。不要删除整个 `~/.copilot` 目录。

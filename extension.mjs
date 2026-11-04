@@ -43,7 +43,12 @@ const bearerTokenProvider = async () => {
 	return tok.accessToken;
 };
 
-let initialProviders = [];
+// Register both auth callbacks even if initial discovery fails. Later refreshes
+// use the same SDK-owned callbacks; no SDK-internal registration APIs are needed.
+let initialProviders = buildCopilotProvidersAndModels([], loadExtensionConfig().endpoint, {
+	bearerTokenProvider,
+	conversationId: CONVERSATION_ID,
+}).providers;
 let initialModels = [];
 let startupWarning = null;
 
@@ -53,7 +58,6 @@ try {
 	const catalog = await fetchLokiCatalog(tok.accessToken, cfg.endpoint);
 	const built = buildCopilotProvidersAndModels(catalog, cfg.endpoint, {
 		bearerTokenProvider,
-		bearerToken: tok.accessToken,
 		conversationId: CONVERSATION_ID,
 		forRpcSync: false,
 	});
@@ -68,25 +72,17 @@ let session;
 async function syncProvidersAndModels(endpoint) {
 	const tok = await getValidToken();
 	const catalog = await fetchLokiCatalog(tok.accessToken, endpoint);
-	if (session?.registerBearerTokenProviders) {
-		session.registerBearerTokenProviders(
-			new Map([
-				[LOKI_ANTHROPIC_PROVIDER, bearerTokenProvider],
-				[LOKI_OPENAI_PROVIDER, bearerTokenProvider],
-			]),
-		);
-	}
 	const { providers, models } = buildCopilotProvidersAndModels(catalog, endpoint, {
 		bearerTokenProvider,
-		bearerToken: tok.accessToken,
 		conversationId: CONVERSATION_ID,
 		forRpcSync: true,
 	});
-	if (session?.rpc?.provider?.sync) {
-		await session.rpc.provider.sync({ providers, models });
-	} else if (session?.rpc?.provider?.add) {
-		await session.rpc.provider.add({ providers, models });
+	if (!session?.rpc?.provider?.sync) {
+		throw new Error("This Copilot CLI version does not support live provider synchronization. Update Copilot CLI.");
 	}
+	await session.rpc.provider.sync({ providers, models });
+	// Use the public session catalog API so the host sees the refreshed model metadata.
+	await session.rpc.model.list({ skipCache: true });
 	try {
 		const cur = await session?.rpc?.model?.getCurrent?.();
 		const activeModelId = cur?.modelId || cur?.selectedModelId || cur?.committedModelId;
@@ -95,7 +91,10 @@ async function syncProvidersAndModels(endpoint) {
 			(activeModelId.startsWith(`${LOKI_ANTHROPIC_PROVIDER}/`) ||
 				activeModelId.startsWith(`${LOKI_OPENAI_PROVIDER}/`))
 		) {
-			await session.rpc.model.switchTo({ modelId: activeModelId });
+			await session.rpc.model.switchTo({
+				modelId: activeModelId,
+				...(cur.reasoningEffort ? { reasoningEffort: cur.reasoningEffort } : {}),
+			});
 		}
 	} catch {}
 	return catalog;
@@ -103,22 +102,6 @@ async function syncProvidersAndModels(endpoint) {
 
 session = await joinSession({
 	...(initialProviders.length > 0 ? { providers: initialProviders, models: initialModels } : {}),
-	hooks: {
-		onSessionStart: async () => {
-			const cfg = loadExtensionConfig();
-			if (startupWarning) {
-				await session.log(`[loki] Startup catalog warning: ${startupWarning}`, {
-					level: "warning",
-					ephemeral: true,
-				});
-			} else if (initialModels.length > 0) {
-				await session.log(
-					`[loki] Connected to ${formatEndpointLabel(cfg.endpoint)} (${initialModels.length} live models registered)`,
-					{ ephemeral: true },
-				);
-			}
-		},
-	},
 	commands: [
 		{
 			name: "loki-login",
@@ -244,83 +227,12 @@ session = await joinSession({
 					const cfg = loadExtensionConfig();
 					const arg = (ctx.args || "").trim();
 					const endpoint = arg ? resolveEndpointAlias(arg) : cfg.endpoint;
-					const tok = await getValidToken();
-					const catalog = await fetchLokiCatalog(tok.accessToken, endpoint);
+					const catalog = endpoint === cfg.endpoint
+						? await syncProvidersAndModels(endpoint)
+						: await fetchLokiCatalog((await getValidToken()).accessToken, endpoint);
 					await session.log(formatModelsTable(catalog, endpoint));
 				} catch (err) {
 					await session.log(`[loki] Models query failed: ${err instanceof Error ? err.message : String(err)}`, {
-						level: "error",
-					});
-				}
-			},
-		},
-		{
-			name: "loki-model",
-			description: "Select or switch a Loki model interactively or by ID (e.g. /loki-model or /loki-model df/claude-opus-5.5)",
-			handler: async (ctx) => {
-				try {
-					let raw = (ctx.args || "").trim();
-					let cfg = loadExtensionConfig();
-					if (!raw) {
-						const tok = await getValidToken();
-						const catalog = await fetchLokiCatalog(tok.accessToken, cfg.endpoint);
-						if (session.capabilities?.ui?.elicitation && catalog.length > 0) {
-							const cur = await session.rpc.model.getCurrent().catch(() => null);
-							const curId = String(cur?.modelId || "").replace(/^loki-(anthropic|openai)\//, "");
-							const ids = catalog.map((m) => m.id);
-							const names = catalog.map(
-								(m) => `${m.name} (${m.id}) — ctx ${Math.round(m.contextWindow / 1000)}K, $${m.cost.input}/$${m.cost.output}`,
-							);
-							const resp = await session.ui.elicitation({
-								message: `Select a Loki model from ${formatEndpointLabel(cfg.endpoint)}:`,
-								requestedSchema: {
-									type: "object",
-									properties: {
-										model: {
-											type: "string",
-											title: "Model",
-											enum: ids,
-											enumNames: names,
-											default: ids.includes(curId) ? curId : ids[0],
-										},
-									},
-									required: ["model"],
-								},
-							});
-							if (resp?.action === "accept" && resp.content?.model) {
-								raw = String(resp.content.model);
-							} else {
-								return;
-							}
-						} else {
-							const cur = await session.rpc.model.getCurrent();
-							await session.log(`[loki] Current session model: ${JSON.stringify(cur)}`);
-							return;
-						}
-					}
-					let targetModel = raw;
-					const slashIdx = raw.indexOf("/");
-					if (slashIdx > 0) {
-						const prefix = raw.slice(0, slashIdx).trim();
-						const rest = raw.slice(slashIdx + 1).trim();
-						if (prefix !== "loki-anthropic" && prefix !== "loki-openai") {
-							const ep = resolveEndpointAlias(prefix);
-							cfg = saveExtensionConfig({ endpoint: ep });
-							await syncProvidersAndModels(ep);
-							targetModel = rest;
-						}
-					}
-					const selectionId = targetModel.includes("/")
-						? targetModel
-						: targetModel.toLowerCase().startsWith("claude")
-							? `loki-anthropic/${targetModel}`
-							: `loki-openai/${targetModel}`;
-					const switched = await session.rpc.model.switchTo({ modelId: selectionId });
-					await session.log(
-						`[loki] Switched session model to ${switched?.modelId || selectionId} (endpoint: ${formatEndpointLabel(cfg.endpoint)})`,
-					);
-				} catch (err) {
-					await session.log(`[loki] Model switch failed: ${err instanceof Error ? err.message : String(err)}`, {
 						level: "error",
 					});
 				}
@@ -431,53 +343,6 @@ session = await joinSession({
 			},
 		},
 		{
-			name: "loki_switch_model",
-			description:
-				"Switch the active Copilot session model to a Loki model (e.g. 'claude-opus-5.5', 'claude-opus-5', 'gpt-61-sol', or 'df/claude-opus-5.5').",
-			skipPermission: true,
-			parameters: {
-				type: "object",
-				properties: {
-					model: {
-						type: "string",
-						description:
-							"Model ID (e.g. 'claude-opus-5.5', 'gpt-61-sol') or '<endpoint>/<model>' (e.g. 'df/claude-opus-5.5').",
-					},
-					reasoningEffort: {
-						type: "string",
-						description: "Optional reasoning effort: low, medium, high, xhigh, max.",
-					},
-				},
-				required: ["model"],
-			},
-			handler: async (args) => {
-				const raw = String(args.model || "").trim();
-				let cfg = loadExtensionConfig();
-				let targetModel = raw;
-				const slashIdx = raw.indexOf("/");
-				if (slashIdx > 0) {
-					const prefix = raw.slice(0, slashIdx).trim();
-					const rest = raw.slice(slashIdx + 1).trim();
-					if (prefix !== "loki-anthropic" && prefix !== "loki-openai") {
-						const ep = resolveEndpointAlias(prefix);
-						cfg = saveExtensionConfig({ endpoint: ep });
-						await syncProvidersAndModels(ep);
-						targetModel = rest;
-					}
-				}
-				const selectionId = targetModel.includes("/")
-					? targetModel
-					: targetModel.toLowerCase().startsWith("claude")
-						? `loki-anthropic/${targetModel}`
-						: `loki-openai/${targetModel}`;
-				const switched = await session.rpc.model.switchTo({
-					modelId: selectionId,
-					...(args.reasoningEffort ? { reasoningEffort: args.reasoningEffort } : {}),
-				});
-				return `Switched session model to ${switched?.modelId || selectionId} (endpoint: ${cfg.endpoint})`;
-			},
-		},
-		{
 			name: "loki_models",
 			description: "Fetch the live model catalog from Microsoft Loki GET /models.",
 			skipPermission: true,
@@ -505,3 +370,18 @@ session = await joinSession({
 		},
 	],
 });
+
+// Only log after joinSession resolves. No hook or prompt-triggered initialization.
+if (startupWarning) {
+	await session.log(`[loki] No live catalog: ${startupWarning}. Run /loki-login to retry.`, { level: "warning" });
+} else {
+	try {
+		await session.rpc.model.list();
+		await session.log(
+			`[loki] ${initialModels.length} live models loaded from ${formatEndpointLabel(loadExtensionConfig().endpoint)}. Use /model, search Loki; use ←/→ for reasoning effort.`,
+			{ ephemeral: true },
+		);
+	} catch (error) {
+		await session.log(`[loki] Provider registered, but host catalog refresh failed: ${error.message}`, { level: "warning" });
+	}
+}

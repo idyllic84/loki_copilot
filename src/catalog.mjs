@@ -32,6 +32,7 @@ function toCatalogItem(entry, baseUrl) {
 	const endpoints = entry.supported_endpoints ?? [];
 	const limits = entry.capabilities?.limits;
 	const efforts = entry.capabilities?.supports?.reasoning_effort ?? [];
+	const capabilities = structuredClone(entry.capabilities ?? {});
 	const reasoning = Array.isArray(efforts) && efforts.length > 0;
 	const contextWindow = limits?.max_context_window_tokens ?? 200_000;
 	const cost = toUsdPerMillion(entry.billing);
@@ -49,6 +50,7 @@ function toCatalogItem(entry, baseUrl) {
 			maxTokens: limits?.max_output_tokens ?? (isAlwaysThinking(entry.id) || entry.id === "claude-opus-5" ? 128_000 : 64_000),
 			reasoning,
 			reasoningEfforts: efforts,
+			capabilities,
 			cost,
 			supportedEndpoints: endpoints,
 		};
@@ -67,6 +69,7 @@ function toCatalogItem(entry, baseUrl) {
 			maxTokens: limits?.max_output_tokens ?? (isResponses ? 128_000 : 64_000),
 			reasoning,
 			reasoningEfforts: efforts,
+			capabilities,
 			cost,
 			supportedEndpoints: endpoints,
 		};
@@ -163,16 +166,37 @@ export function buildCopilotProvidersAndModels(catalog, baseUrl, options = {}) {
 		},
 	];
 
-	const models = catalog.map((item) => ({
-		id: item.id,
-		provider: item.provider,
-		wireModel: item.id,
-		modelId: item.id,
-		name: `${item.name} [Loki]`,
-		maxContextWindowTokens: item.contextWindow,
-		maxPromptTokens: Math.max(32_000, item.contextWindow - item.maxTokens),
-		maxOutputTokens: item.maxTokens,
-	}));
+	const models = catalog.map((item) => {
+		const capabilities = structuredClone(item.capabilities ?? {});
+		const maxPromptTokens = capabilities.limits?.max_prompt_tokens ?? (item.contextWindow - item.maxTokens);
+		// These documented capability fields are consumed by the native model picker.
+		// Top-level BYOK token fields alone do not describe picker capabilities.
+		capabilities.limits = {
+			...capabilities.limits,
+			max_context_window_tokens: item.contextWindow,
+			max_prompt_tokens: maxPromptTokens,
+			max_output_tokens: item.maxTokens,
+		};
+		capabilities.supports = {
+			...capabilities.supports,
+			reasoning_effort: [...item.reasoningEfforts],
+		};
+		if (item.type === "anthropic" && item.reasoning) {
+			// Loki accepts adaptive thinking, not manual budget_tokens.
+			capabilities.supports.adaptive_thinking ??= isAlwaysThinking(item.id) ? "adaptive_only" : "required";
+		}
+		return {
+			id: item.id,
+			provider: item.provider,
+			wireModel: item.id,
+			modelId: item.id,
+			name: `${item.name} [Loki]`,
+			maxContextWindowTokens: item.contextWindow,
+			maxPromptTokens,
+			maxOutputTokens: item.maxTokens,
+			capabilities,
+		};
+	});
 
 	return { providers, models };
 }

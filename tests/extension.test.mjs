@@ -84,6 +84,14 @@ test("fetchLokiCatalog and buildCopilotProvidersAndModels map Claude and GPT mod
 	assert.equal(models[0].provider, LOKI_ANTHROPIC_PROVIDER);
 	assert.equal(models[1].id, "gpt-61-sol");
 	assert.equal(models[1].provider, LOKI_OPENAI_PROVIDER);
+	assert.deepEqual(models[0].capabilities.supports.reasoning_effort, ["low", "medium", "high", "xhigh", "max"]);
+	assert.equal(models[0].capabilities.supports.adaptive_thinking, "adaptive_only");
+	assert.equal(models[1].capabilities.supports.adaptive_thinking, undefined);
+	assert.equal(models[0].capabilities.limits.max_context_window_tokens, 1_000_000);
+	assert.equal(models[0].capabilities.limits.max_prompt_tokens, 872_000);
+	assert.equal(models[0].capabilities.limits.max_output_tokens, 128_000);
+	assert.notEqual(models[0].capabilities, catalog[0].capabilities);
+	assert.equal(catalog[0].capabilities.supports.adaptive_thinking, undefined, "Registration must not mutate the discovery response.");
 
 	const table = formatModelsTable(catalog, DF_UPSTREAM);
 	assert.match(table, /loki-anthropic\/claude-opus-5\.5/);
