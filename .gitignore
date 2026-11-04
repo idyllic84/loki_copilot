@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Credentials and caches — never commit
+*.token
+*auth.json
+*config.json
+*msal*cache*.json
+*.pem
+*.key
+.env
+.env.*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
