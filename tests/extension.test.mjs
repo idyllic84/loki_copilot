@@ -55,14 +55,29 @@ test("fetchLokiCatalog and buildCopilotProvidersAndModels map Claude and GPT mod
 	assert.equal(catalog.length, 2);
 
 	const dummyBearer = async () => "TEST_TOKEN";
-	const { providers, models } = buildCopilotProvidersAndModels(catalog, DF_UPSTREAM, dummyBearer);
+	const { providers, models } = buildCopilotProvidersAndModels(catalog, DF_UPSTREAM, {
+		bearerTokenProvider: dummyBearer,
+		bearerToken: "TEST_TOKEN",
+		conversationId: "00000000-0000-0000-0000-000000000001",
+	});
 
 	assert.equal(providers.length, 2);
 	assert.equal(providers[0].name, LOKI_ANTHROPIC_PROVIDER);
 	assert.equal(providers[0].type, "anthropic");
+	assert.equal(providers[0].headers["X-ConversationId"], "00000000-0000-0000-0000-000000000001");
+	assert.equal(providers[0].headers["anthropic-version"], "2023-06-01");
 	assert.equal(providers[1].name, LOKI_OPENAI_PROVIDER);
 	assert.equal(providers[1].type, "openai");
 	assert.equal(providers[1].wireApi, "responses");
+	assert.equal(providers[1].headers["X-ConversationId"], "00000000-0000-0000-0000-000000000001");
+
+	const synced = buildCopilotProvidersAndModels(catalog, PROD_UPSTREAM, {
+		bearerTokenProvider: dummyBearer,
+		bearerToken: "TEST_TOKEN",
+		forRpcSync: true,
+	});
+	assert.equal(synced.providers[0].hasBearerTokenProvider, true);
+	assert.equal(synced.providers[0].bearerToken, "TEST_TOKEN");
 
 	assert.equal(models.length, 2);
 	assert.equal(models[0].id, "claude-opus-5.5");

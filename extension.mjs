@@ -18,10 +18,13 @@
  *      - `loki_models`
  */
 
+import { randomUUID } from "node:crypto";
 import { joinSession } from "@github/copilot-sdk/extension";
 import { buildCopilotProvidersAndModels, fetchLokiCatalog, formatModelsTable } from "./src/catalog.mjs";
 import {
 	DF_UPSTREAM,
+	LOKI_ANTHROPIC_PROVIDER,
+	LOKI_OPENAI_PROVIDER,
 	MSIT_UPSTREAM,
 	PROD_UPSTREAM,
 	formatEndpointLabel,
@@ -32,6 +35,8 @@ import {
 import { fetchLokiQuota, formatLokiQuota } from "./src/quota.mjs";
 import { lokiWebBrowse, lokiWebSearch } from "./src/search.mjs";
 import { acquireWamToken, getValidToken } from "./src/wam.mjs";
+
+const CONVERSATION_ID = process.env.SESSION_ID || randomUUID();
 
 const bearerTokenProvider = async () => {
 	const tok = await getValidToken();
@@ -46,7 +51,12 @@ try {
 	const cfg = loadExtensionConfig();
 	const tok = await getValidToken(AbortSignal.timeout(25_000));
 	const catalog = await fetchLokiCatalog(tok.accessToken, cfg.endpoint);
-	const built = buildCopilotProvidersAndModels(catalog, cfg.endpoint, bearerTokenProvider);
+	const built = buildCopilotProvidersAndModels(catalog, cfg.endpoint, {
+		bearerTokenProvider,
+		bearerToken: tok.accessToken,
+		conversationId: CONVERSATION_ID,
+		forRpcSync: false,
+	});
 	initialProviders = built.providers;
 	initialModels = built.models;
 } catch (err) {
@@ -58,12 +68,36 @@ let session;
 async function syncProvidersAndModels(endpoint) {
 	const tok = await getValidToken();
 	const catalog = await fetchLokiCatalog(tok.accessToken, endpoint);
-	const { providers, models } = buildCopilotProvidersAndModels(catalog, endpoint, bearerTokenProvider);
+	if (session?.registerBearerTokenProviders) {
+		session.registerBearerTokenProviders(
+			new Map([
+				[LOKI_ANTHROPIC_PROVIDER, bearerTokenProvider],
+				[LOKI_OPENAI_PROVIDER, bearerTokenProvider],
+			]),
+		);
+	}
+	const { providers, models } = buildCopilotProvidersAndModels(catalog, endpoint, {
+		bearerTokenProvider,
+		bearerToken: tok.accessToken,
+		conversationId: CONVERSATION_ID,
+		forRpcSync: true,
+	});
 	if (session?.rpc?.provider?.sync) {
 		await session.rpc.provider.sync({ providers, models });
 	} else if (session?.rpc?.provider?.add) {
 		await session.rpc.provider.add({ providers, models });
 	}
+	try {
+		const cur = await session?.rpc?.model?.getCurrent?.();
+		const activeModelId = cur?.modelId || cur?.selectedModelId || cur?.committedModelId;
+		if (
+			typeof activeModelId === "string" &&
+			(activeModelId.startsWith(`${LOKI_ANTHROPIC_PROVIDER}/`) ||
+				activeModelId.startsWith(`${LOKI_OPENAI_PROVIDER}/`))
+		) {
+			await session.rpc.model.switchTo({ modelId: activeModelId });
+		}
+	} catch {}
 	return catalog;
 }
 

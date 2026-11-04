@@ -3,6 +3,7 @@
  * `NamedProviderConfig` + `ProviderModelConfig` entries.
  */
 
+import { randomUUID } from "node:crypto";
 import {
 	CREDIT_TO_USD,
 	DEFAULT_UPSTREAM,
@@ -112,16 +113,44 @@ export async function fetchLokiCatalog(token, baseUrl = DEFAULT_UPSTREAM, signal
 /**
  * Build Copilot SDK `NamedProviderConfig[]` and `ProviderModelConfig[]` from a live Loki catalog.
  */
-export function buildCopilotProvidersAndModels(catalog, baseUrl, bearerTokenProvider) {
+export function buildCopilotProvidersAndModels(catalog, baseUrl, options = {}) {
 	const cleanUrl = (baseUrl || DEFAULT_UPSTREAM).replace(/\/+$/, "");
+	const {
+		bearerTokenProvider,
+		bearerToken,
+		conversationId = process.env.SESSION_ID || randomUUID(),
+		forRpcSync = false,
+	} = typeof options === "function" ? { bearerTokenProvider: options } : options;
+
+	const headers = {
+		...LOKI_HEADERS,
+		"X-ConversationId": conversationId,
+	};
+
+	const buildAuthFields = () => {
+		if (forRpcSync) {
+			return {
+				...(bearerTokenProvider ? { hasBearerTokenProvider: true } : {}),
+				...(bearerToken ? { bearerToken } : {}),
+			};
+		}
+		return {
+			...(bearerTokenProvider ? { bearerTokenProvider } : {}),
+			...(bearerToken ? { bearerToken } : {}),
+		};
+	};
+
 	const providers = [
 		{
 			name: LOKI_ANTHROPIC_PROVIDER,
 			type: "anthropic",
 			modelProvider: "anthropic",
 			baseUrl: cleanUrl,
-			headers: { ...LOKI_HEADERS },
-			bearerTokenProvider,
+			headers: {
+				...headers,
+				"anthropic-version": "2023-06-01",
+			},
+			...buildAuthFields(),
 		},
 		{
 			name: LOKI_OPENAI_PROVIDER,
@@ -129,8 +158,8 @@ export function buildCopilotProvidersAndModels(catalog, baseUrl, bearerTokenProv
 			wireApi: "responses",
 			modelProvider: "openai",
 			baseUrl: cleanUrl,
-			headers: { ...LOKI_HEADERS },
-			bearerTokenProvider,
+			headers: { ...headers },
+			...buildAuthFields(),
 		},
 	];
 
