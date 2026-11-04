@@ -87,8 +87,8 @@ test("native /model lists dynamic Loki models and supports Low through Max", { s
 		await waitFor((value) => value.includes("(high) for this session") || value.includes(`${target} · High`), "committed High effort");
 		// Refresh the live directory through the extension, then check the native
 		// picker again. This covers callback auth and effort surviving provider.sync.
-		child.write("/loki-models"); await delay(300); child.write("\r");
-		await waitFor((value) => value.includes("Loki Live Models ("), "live catalog resynchronization");
+		child.write("/loki-endpoint prod"); await delay(300); child.write("\r");
+		await waitFor((value) => value.includes("Switched endpoint to prod"), "live catalog resynchronization");
 		child.write("/model"); await delay(300); child.write("\r");
 		await waitFor((value) => value.includes("Search models"), "reopened native picker");
 		child.write("loki");

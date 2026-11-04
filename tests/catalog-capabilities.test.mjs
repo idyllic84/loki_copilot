@@ -40,7 +40,7 @@ test("non-reasoning models do not advertise fabricated thinking levels", async (
 test("prod is the default, with no static model list or competing model-selection command", () => {
 	assert.equal(DEFAULT_UPSTREAM, PROD_UPSTREAM);
 	const source = readFileSync(new URL("../extension.mjs", import.meta.url), "utf8");
-	assert.ok(!/name:\s*"loki-model"/.test(source));
+	assert.ok(!/name:\s*"loki-models?"/.test(source));
 	assert.ok(!/name:\s*"loki_switch_model"/.test(source));
 	assert.ok(!source.includes("registerBearerTokenProviders"), "Do not depend on SDK-internal callback registration methods.");
 });

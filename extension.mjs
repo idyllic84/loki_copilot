@@ -10,7 +10,6 @@
  *      - `/loki-login [account | picker]`
  *      - `/loki-endpoint [prod | msit | df | <https://...>]`
  *      - `/loki-usage [prod | msit | df]`
- *      - `/loki-models [prod | msit | df]`
  *   4. Registers agent tools (`skipPermission: true` read-only):
  *      - `loki_web_search`
  *      - `loki_web_browse`
@@ -214,25 +213,6 @@ session = await joinSession({
 					await session.log(formatLokiQuota(snapshots, endpoint));
 				} catch (err) {
 					await session.log(`[loki] Quota query failed: ${err instanceof Error ? err.message : String(err)}`, {
-						level: "error",
-					});
-				}
-			},
-		},
-		{
-			name: "loki-models",
-			description: "List live models from Loki GET /models [prod | msit | df]",
-			handler: async (ctx) => {
-				try {
-					const cfg = loadExtensionConfig();
-					const arg = (ctx.args || "").trim();
-					const endpoint = arg ? resolveEndpointAlias(arg) : cfg.endpoint;
-					const catalog = endpoint === cfg.endpoint
-						? await syncProvidersAndModels(endpoint)
-						: await fetchLokiCatalog((await getValidToken()).accessToken, endpoint);
-					await session.log(formatModelsTable(catalog, endpoint));
-				} catch (err) {
-					await session.log(`[loki] Models query failed: ${err instanceof Error ? err.message : String(err)}`, {
 						level: "error",
 					});
 				}

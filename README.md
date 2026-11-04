@@ -69,9 +69,9 @@ npm run install:user
 /model loki-openai/gpt-61-sol
 ```
 
-模型 ID 会随服务变动，使用 `/loki-models` 查询当前目录。
+模型 ID 会随服务变动，以原生选单中的 `[Loki]` 条目为准。需要重新拉取上游目录时执行 `/extensions reload`，或重新设置当前 endpoint。
 
-**1.1.0 已删除 `/loki-model` 命令和 `loki_switch_model` 工具**，模型选择与推理强度统一交给宿主原生选单。
+**已删除 `/loki-model`、`/loki-models` 命令及 `loki_switch_model` 工具**，模型查看、选择与推理强度统一交给宿主原生选单。
 
 ### 扩展命令
 
@@ -80,8 +80,6 @@ npm run install:user
 | `/loki-login` | 使用 WAM 登录，随后同步模型 |
 | `/loki-login user@example.com` | 指定企业账号 |
 | `/loki-login picker` | 打开 Windows 账号选择器 |
-| `/loki-models` | 实时拉取当前环境模型并同步到会话，随后重新打开 `/model` 查看 |
-| `/loki-models df` | 只查询另一个环境的目录，不切换当前环境 |
 | `/loki-endpoint` | 在支持交互表单的宿主中选择环境，否则显示当前环境及用法 |
 | `/loki-endpoint prod` | 切回默认生产环境并刷新模型 |
 | `/loki-endpoint msit` 或 `/loki-endpoint df` | 切换环境并保存选择 |
@@ -106,7 +104,7 @@ npm run install:user
 - 自定义 endpoint 会接收你的令牌和请求内容，只配置可信地址。
 - 插件不读写 Copilot 的 Provider 认证环境变量，但宿主自身的权限、组织策略、扩展启用状态及 SDK 版本仍可能影响运行。
 - **内置 `/login` 暂无已确认的自定义认证提供方注册接口**，因此保留 `/loki-login`，不覆盖宿主登录菜单。
-- `Context` 列展示由宿主决定，未声明上下文档位的 BYOK 模型可能显示 `—`；这不等于请求被限制到小窗口。注册配置包含模型上下文和输出限制，不虚构上下文档位。
+- **原生 `Context` 列的已知显示限制（CLI 1.0.106-8）**：即使公开 `session.model.list` 已返回正确的 `max_context_window_tokens`、`max_prompt_tokens`、`max_output_tokens`，BYOK 条目仍显示 `—`。本项目同时传递顶层和 `capabilities.limits` 两种官方定义的限制字段，但不伪造计费数据、上下文档位或模型名称来冒充列显示修复。显示为空不等于上下文被限制到小窗口，准确上限应以模型能力数据为准。
 - 多 Provider SDK 接口仍属实验性。当前验证版本上的可用行为，不代表所有 Copilot 版本都兼容。
 
 ## 五、测试
@@ -128,7 +126,7 @@ $env:LOKI_COPILOT_TUI_TEST = "1"
 npm run test:copilot
 ```
 
-测试通过无可见控制台窗口的 ConPTY 打开真实 Copilot，搜索并选中 Loki 模型，验证 `Low → Medium → High → Extra High → Max`、确认 High、刷新动态目录后保留档位，并检查 `providers.json` 未改变。只对该次扩展启动确认权限，不保存全局授权。
+测试通过无可见控制台窗口的 ConPTY 打开真实 Copilot，搜索并选中 Loki 模型，验证 `Low → Medium → High → Extra High → Max`、确认 High、通过 `/loki-endpoint prod` 刷新动态目录后保留档位，并检查 `providers.json` 未改变。测试会把插件 endpoint 设为 prod；只对该次扩展启动确认权限，不保存全局授权。
 
 可选地设置 `COPILOT_TEST_CLI` 指定 Copilot 可执行文件或官方 JavaScript 入口；设置 `LOKI_TEST_MODEL_LABEL` 选择其他模型名称。测试默认目标为 `Claude Opus 5.5 [Loki]`，目标需要支持上述五个档位。测试会创建正常的 Copilot 会话记录。
 
