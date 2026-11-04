@@ -1,6 +1,6 @@
 {
   "name": "loki_copilot",
-  "version": "1.2.1",
+  "version": "1.0.0",
   "description": "Microsoft Entra (Loki LLM API) Extension for GitHub Copilot CLI",
   "license": "MIT",
   "type": "module",
