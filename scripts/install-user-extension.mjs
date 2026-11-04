@@ -5,6 +5,7 @@
  * from the development repository.
  */
 
+import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -34,4 +35,23 @@ if (existsSync(nmSrc)) {
 	cpSync(nmSrc, join(targetDir, "node_modules"), { recursive: true });
 }
 
+const npmCmd = spawnSync(
+	process.execPath,
+	[
+		"-e",
+		`
+import { execFileSync } from "node:child_process";
+const tokenCmd = 'node "' + ${JSON.stringify(join(targetDir, "src", "wam.mjs").replace(/\\/g, "/"))} + '"';
+execFileSync("powershell.exe", [
+  "-NoProfile",
+  "-Command",
+  '[Environment]::SetEnvironmentVariable("COPILOT_LOKI_TOKEN_COMMAND", $env:TCMD, "User"); if (-not [Environment]::GetEnvironmentVariable("COPILOT_LOKI_BASE_URL", "User")) { [Environment]::SetEnvironmentVariable("COPILOT_LOKI_BASE_URL", "https://loki.delve.office.com/api/v1/llmapi", "User") }'
+], { env: { ...process.env, TCMD: tokenCmd }, windowsHide: true });
+`,
+	],
+	{ windowsHide: true, stdio: "inherit" },
+);
+void npmCmd;
+
 console.log(`Installed Copilot CLI extension to: ${targetDir}`);
+console.log(`Configured user env COPILOT_LOKI_TOKEN_COMMAND and COPILOT_LOKI_BASE_URL so native '/model' picker works directly.`);

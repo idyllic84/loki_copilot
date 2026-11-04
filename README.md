@@ -8,14 +8,13 @@
 
 ## 一、主要功能
 
-- **Windows WAM SSO 自动鉴权**：通过 `bearerTokenProvider` 回调与 `wam-helper.mjs` 按需静默获取/刷新 M365 Entra Token，全程无控制台窗口弹出（`windowsHide: true`）。
-- **动态注入 Loki 模型目录（`GET /models`）**：会话启动及切换环境时实时拉取 `<endpoint>/models`，向 Copilot CLI 动态注册两个增量 BYOK Provider：
-  - `loki-anthropic/<model_id>`（Claude 系列，走 `/v1/messages`）
-  - `loki-openai/<model_id>`（GPT 系列，走 `/responses`）
+- **原生接入 Copilot CLI 内置 `/model` 菜单**：安装脚本会自动配置 Copilot CLI 的原生 Loki 认证桥接变量（`COPILOT_LOKI_TOKEN_COMMAND` 与 `COPILOT_LOKI_BASE_URL`）。当你在 Copilot CLI 中选择 **Microsoft Entra** 账号（或处于 Loki 会话）时，直接输入内置的 **`/model`** 即可在原生菜单中上下键选择 `claude-opus-5.5`、`claude-opus-5`、`gpt-61-sol` 等模型，原生状态栏配额、思维链与协议路由全部自动生效。
+- **支持跨账号（如 GitHub 账号下）直接混用 Loki 模型**：即使当前登录的是普通 GitHub 账号，扩展也会通过 `joinSession` 动态注册 `loki-anthropic/<model_id>` 与 `loki-openai/<model_id>`，并支持无参数运行 **`/loki-model`** 弹出交互式模型选择框。
+- **Windows WAM SSO 自动鉴权**：通过 `wam-helper.mjs` 按需静默获取/刷新 M365 Entra Token，全程无控制台窗口弹出（`windowsHide: true`）。
 - **交互式斜杠命令（Slash Commands）**：
+  - `/loki-model [ep/model_id | model_id]`：无参数时直接弹出交互式模型选择列表；也可传参一键切换环境与模型（如 `/loki-model df/claude-opus-5.5`）
+  - `/loki-endpoint [prod | msit | df | <https://...>]`：查看或切换 Loki 环境（无参数时弹出选择框），切换后自动热同步当前会话并更新 `COPILOT_LOKI_BASE_URL`
   - `/loki-login [account | picker]`：执行 WAM 登录并实时同步模型目录
-  - `/loki-endpoint [prod | msit | df | <https://...>]`：查看或切换 Loki 环境（无参数时支持通过 `session.ui.elicitation` 弹出选择框），切换后自动热同步模型
-  - `/loki-model [ep/model_id | model_id]`：一键切换当前会话模型（支持如 `/loki-model df/claude-opus-5.5` 同时切换环境与模型）
   - `/loki-models [prod | msit | df]`：在会话时间线中列出实时模型目录、上下文窗口与单价
   - `/loki-usage [prod | msit | df]`：实时查询 `GET /quota` 云端 `ai_credits` 用量与配额周期
 - **内置只读 Agent 工具（`skipPermission: true`）**：

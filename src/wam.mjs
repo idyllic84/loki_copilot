@@ -121,3 +121,14 @@ export async function getValidToken(signal) {
 	}
 	return acquireWamToken("silent", undefined, signal);
 }
+
+if (import.meta.main) {
+	getValidToken()
+		.then((tok) => {
+			process.stdout.write(`${tok.accessToken}\n`);
+		})
+		.catch((err) => {
+			process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+			process.exit(1);
+		});
+}

@@ -205,6 +205,21 @@ session = await joinSession({
 				}
 
 				saveExtensionConfig({ endpoint: nextUrl });
+				if (process.platform === "win32") {
+					try {
+						const { execFile } = await import("node:child_process");
+						execFile(
+							"powershell.exe",
+							[
+								"-NoProfile",
+								"-Command",
+								`[Environment]::SetEnvironmentVariable("COPILOT_LOKI_BASE_URL", $env:NEXT_LOKI_URL, "User")`,
+							],
+							{ env: { ...process.env, NEXT_LOKI_URL: nextUrl }, windowsHide: true },
+							() => {},
+						);
+					} catch {}
+				}
 				try {
 					const catalog = await syncProvidersAndModels(nextUrl);
 					await session.log(
@@ -256,16 +271,48 @@ session = await joinSession({
 		},
 		{
 			name: "loki-model",
-			description: "Switch session model to a Loki model (e.g. /loki-model df/claude-opus-5.5 or /loki-model gpt-61-sol)",
+			description: "Select or switch a Loki model interactively or by ID (e.g. /loki-model or /loki-model df/claude-opus-5.5)",
 			handler: async (ctx) => {
 				try {
-					const raw = (ctx.args || "").trim();
-					if (!raw) {
-						const cur = await session.rpc.model.getCurrent();
-						await session.log(`[loki] Current session model: ${JSON.stringify(cur)}`);
-						return;
-					}
+					let raw = (ctx.args || "").trim();
 					let cfg = loadExtensionConfig();
+					if (!raw) {
+						const tok = await getValidToken();
+						const catalog = await fetchLokiCatalog(tok.accessToken, cfg.endpoint);
+						if (session.capabilities?.ui?.elicitation && catalog.length > 0) {
+							const cur = await session.rpc.model.getCurrent().catch(() => null);
+							const curId = String(cur?.modelId || "").replace(/^loki-(anthropic|openai)\//, "");
+							const ids = catalog.map((m) => m.id);
+							const names = catalog.map(
+								(m) => `${m.name} (${m.id}) — ctx ${Math.round(m.contextWindow / 1000)}K, $${m.cost.input}/$${m.cost.output}`,
+							);
+							const resp = await session.ui.elicitation({
+								message: `Select a Loki model from ${formatEndpointLabel(cfg.endpoint)}:`,
+								requestedSchema: {
+									type: "object",
+									properties: {
+										model: {
+											type: "string",
+											title: "Model",
+											enum: ids,
+											enumNames: names,
+											default: ids.includes(curId) ? curId : ids[0],
+										},
+									},
+									required: ["model"],
+								},
+							});
+							if (resp?.action === "accept" && resp.content?.model) {
+								raw = String(resp.content.model);
+							} else {
+								return;
+							}
+						} else {
+							const cur = await session.rpc.model.getCurrent();
+							await session.log(`[loki] Current session model: ${JSON.stringify(cur)}`);
+							return;
+						}
+					}
 					let targetModel = raw;
 					const slashIdx = raw.indexOf("/");
 					if (slashIdx > 0) {
