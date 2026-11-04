@@ -15,7 +15,7 @@ import { requestWebGroundingMcp } from "./search.mjs";
 const ALLOWED_TOOLS = new Set(["web", "browse"]);
 
 export function createWebGroundingServer({ getToken = getValidToken, loadConfig = loadExtensionConfig, request = requestWebGroundingMcp } = {}) {
-	const server = new Server({ name: "loki-web", version: "1.2.0" }, { capabilities: { tools: {} } });
+	const server = new Server({ name: "loki-web", version: "1.2.1" }, { capabilities: { tools: {} } });
 	async function upstream(method, params, signal) {
 		const { endpoint } = loadConfig();
 		const token = await getToken(signal);

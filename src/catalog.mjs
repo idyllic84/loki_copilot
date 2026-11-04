@@ -208,7 +208,7 @@ export function buildCopilotProvidersAndModels(catalog, baseUrl, options = {}) {
 			provider: item.provider,
 			wireModel: item.id,
 			modelId: item.id,
-			name: `${item.name} [Loki] · ctx=${formatContextWindowLimit(item.capabilities?.limits?.max_context_window_tokens)} · ${item.priceLabel ?? "price=unknown"}`,
+			name: `${item.name} [Loki]`,
 			maxContextWindowTokens: item.contextWindow,
 			maxPromptTokens,
 			maxOutputTokens: item.maxTokens,

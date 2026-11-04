@@ -82,10 +82,10 @@ test("fetchLokiCatalog and buildCopilotProvidersAndModels map Claude and GPT mod
 	assert.equal(models.length, 2);
 	assert.equal(models[0].id, "claude-opus-5.5");
 	assert.equal(models[0].provider, LOKI_ANTHROPIC_PROVIDER);
-	assert.equal(models[0].name, "Claude Opus 5.5 [Loki] · ctx=1,000,000 · ~$4.40/$22.00/1M");
+	assert.equal(models[0].name, "Claude Opus 5.5 [Loki]");
 	assert.equal(models[1].id, "gpt-61-sol");
 	assert.equal(models[1].provider, LOKI_OPENAI_PROVIDER);
-	assert.equal(models[1].name, "GPT-6.1 Sol [Loki] · ctx=1,050,000 · ~$2.20/$11.00/1M");
+	assert.equal(models[1].name, "GPT-6.1 Sol [Loki]");
 	assert.deepEqual(models[0].capabilities.supports.reasoning_effort, ["low", "medium", "high", "xhigh", "max"]);
 	assert.equal(models[0].capabilities.supports.adaptive_thinking, "adaptive_only");
 	assert.equal(models[1].capabilities.supports.adaptive_thinking, undefined);
