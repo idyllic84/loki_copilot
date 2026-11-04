@@ -10,11 +10,8 @@
  *      - `/loki-login [account | picker]`
  *      - `/loki-endpoint [prod | msit | df | <https://...>]`
  *      - `/loki-usage [prod | msit | df]`
- *   4. Registers agent tools (`skipPermission: true` read-only):
- *      - `loki_web_search`
- *      - `loki_web_browse`
- *      - `loki_quota`
- *      - `loki_models`
+ *   4. Registers `loki-web` as a native MCP server (web + browse).
+ *   5. Registers read-only quota and model-catalog agent tools.
  */
 
 import { randomUUID } from "node:crypto";
@@ -32,7 +29,7 @@ import {
 	saveExtensionConfig,
 } from "./src/config.mjs";
 import { fetchLokiQuota, formatLokiQuota } from "./src/quota.mjs";
-import { lokiWebBrowse, lokiWebSearch } from "./src/search.mjs";
+import { refreshWebGrounding } from "./src/web-grounding.mjs";
 import { acquireWamToken, getValidToken } from "./src/wam.mjs";
 
 const CONVERSATION_ID = process.env.SESSION_ID || randomUUID();
@@ -99,6 +96,14 @@ async function syncProvidersAndModels(endpoint) {
 	return catalog;
 }
 
+async function syncWebGrounding(options) {
+	try {
+		await refreshWebGrounding(session, options);
+	} catch {
+		await session.log("[loki] WebGrounding MCP could not connect. After /loki-login, use /mcp to reload loki-web.", { level: "warning" });
+	}
+}
+
 session = await joinSession({
 	...(initialProviders.length > 0 ? { providers: initialProviders, models: initialModels } : {}),
 	commands: [
@@ -114,6 +119,7 @@ session = await joinSession({
 					const tok = await acquireWamToken(usePicker ? "interactive_only" : "interactive", hint);
 					const cfg = loadExtensionConfig();
 					const catalog = await syncProvidersAndModels(cfg.endpoint);
+					await syncWebGrounding();
 					await session.log(
 						`[loki] Logged in as ${tok.account}. Synced ${catalog.length} models from ${formatEndpointLabel(cfg.endpoint)}.`,
 					);
@@ -189,6 +195,7 @@ session = await joinSession({
 				saveExtensionConfig({ endpoint: nextUrl });
 				try {
 					const catalog = await syncProvidersAndModels(nextUrl);
+					await syncWebGrounding();
 					await session.log(
 						`[loki] Switched endpoint to ${formatEndpointLabel(nextUrl)} (${catalog.length} models synced).`,
 					);
@@ -220,82 +227,6 @@ session = await joinSession({
 		},
 	],
 	tools: [
-		{
-			name: "loki_web_search",
-			description:
-				"Search the web via Microsoft Loki WebGrounding (/tools/web/mcp) and return ranked titles, URLs, and dates.",
-			skipPermission: true,
-			parameters: {
-				type: "object",
-				properties: {
-					query: {
-						type: "string",
-						description: "The web search query.",
-					},
-					maxResults: {
-						type: "integer",
-						description: "Maximum number of results to return (1-6, default 6).",
-					},
-					language: {
-						type: "string",
-						description: "Two-letter language code (e.g. 'en' or 'zh', default 'en').",
-					},
-					region: {
-						type: "string",
-						description: "Two-letter region code (e.g. 'US' or 'CN', default 'US').",
-					},
-				},
-				required: ["query"],
-			},
-			handler: async (args) => {
-				try {
-					const cfg = loadExtensionConfig();
-					const tok = await getValidToken();
-					const results = await lokiWebSearch(tok.accessToken, args.query, {
-						baseUrl: cfg.endpoint,
-						maxResults: args.maxResults,
-						language: args.language,
-						region: args.region,
-					});
-					return JSON.stringify(results, null, 2);
-				} catch (err) {
-					process.stderr.write(`[loki-ext] loki_web_search error: ${err?.stack || err}\n`);
-					throw err;
-				}
-			},
-		},
-		{
-			name: "loki_web_browse",
-			description: "Fetch a single web page's full text content via Microsoft Loki WebGrounding (/tools/web/mcp).",
-			skipPermission: true,
-			parameters: {
-				type: "object",
-				properties: {
-					url: {
-						type: "string",
-						description: "The HTTPS URL of the webpage to fetch.",
-					},
-					maxLength: {
-						type: "integer",
-						description: "Maximum characters of page content to return (1-20000, default 20000).",
-					},
-				},
-				required: ["url"],
-			},
-			handler: async (args) => {
-				try {
-					const cfg = loadExtensionConfig();
-					const tok = await getValidToken();
-					return await lokiWebBrowse(tok.accessToken, args.url, {
-						baseUrl: cfg.endpoint,
-						maxLength: args.maxLength,
-					});
-				} catch (err) {
-					process.stderr.write(`[loki-ext] loki_web_browse error: ${err?.stack || err}\n`);
-					throw err;
-				}
-			},
-		},
 		{
 			name: "loki_quota",
 			description: "Query live Microsoft Loki cloud AI credit quota and usage from GET /quota.",
@@ -350,6 +281,8 @@ session = await joinSession({
 		},
 	],
 });
+
+await syncWebGrounding({ restart: false });
 
 // Only log after joinSession resolves. No hook or prompt-triggered initialization.
 if (startupWarning) {

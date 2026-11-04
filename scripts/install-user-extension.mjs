@@ -9,6 +9,7 @@ import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { installMcpConfig } from "../src/mcp-config.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
@@ -34,4 +35,6 @@ if (existsSync(nmSrc)) {
 	cpSync(nmSrc, join(targetDir, "node_modules"), { recursive: true });
 }
 
+const mcpConfigPath = installMcpConfig(copilotHome, targetDir);
 console.log(`Installed Copilot CLI extension to: ${targetDir}`);
+console.log(`Registered loki-web MCP in: ${mcpConfigPath} (no credentials stored).`);

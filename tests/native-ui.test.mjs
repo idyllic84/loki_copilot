@@ -78,6 +78,7 @@ test("native /model lists dynamic Loki models and supports Low through Max", { s
 		const selectedLine = () => text().split("\n").find((line) => /^\s*❯\s+/.test(line) && line.includes(target)) || "";
 		assert.ok(selectedLine(), "The target must be an actual selectable row, not only a timeline message.");
 		assert.match(selectedLine(), /ctx=[1-9]\d{0,2}(?:,\d{3})*/, "The native row must show the upstream total context-window limit.");
+		assert.match(selectedLine(), /~\$[\d,.]+\/\$[\d,.]+\/1M/, "The native row must show input/output prices with their unit.");
 		for (let i = 0; i < 6; i++) { child.write("\x1b[D"); await delay(120); }
 		await waitFor(() => selectedLine().includes("Low"), "Low reasoning");
 		for (const level of ["Medium", "High", "Extra High", "Max"]) {
@@ -95,6 +96,9 @@ test("native /model lists dynamic Loki models and supports Low through Max", { s
 		child.write("loki");
 		await waitFor(() => selectedLine().includes("High"), "High effort preserved after live refresh");
 		child.write("\r"); await delay(700);
+		child.write("/mcp"); await delay(300); child.write("\r");
+		await waitFor((value) => value.includes("Installed (") && /^\s*◎\s+loki-web\b/m.test(value), "connected loki-web row in the native MCP menu");
+		child.write("\x1b"); await delay(500);
 		if (process.env.LOKI_COPILOT_LIVE_TEST === "1") {
 			child.write("Reply exactly: LOKI_NATIVE_HIGH_OK."); await delay(300); child.write("\r");
 			await waitFor((value) => /●\s+LOKI_NATIVE_HIGH_OK\.?/.test(value), "real Loki response after native High selection", 35_000);

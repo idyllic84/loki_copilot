@@ -1,6 +1,6 @@
 {
   "name": "loki_copilot",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Microsoft Entra (Loki LLM API) Extension for GitHub Copilot CLI",
   "license": "MIT",
   "type": "module",
@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "@azure/msal-node": "^7.1.0",
-    "@azure/msal-node-extensions": "^5.5.2"
+    "@azure/msal-node-extensions": "^5.5.2",
+    "@modelcontextprotocol/sdk": "^1.32.2"
   },
   "devDependencies": {
     "@lydell/node-pty": "1.2.0-beta.18",

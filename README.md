@@ -22,7 +22,7 @@ npm install
 npm run install:user
 ```
 
-安装完成后，扩展会放在 `~/.copilot/extensions/loki`，与下载的源码目录分开。
+安装完成后，扩展会放在 `~/.copilot/extensions/loki`，与下载的源码目录分开。安装脚本还会登记名为 **`loki-web`** 的 MCP 服务，之后可以在 Copilot 的 `/mcp` 菜单中查看；配置中不保存令牌，也不会替换其他 MCP 服务。
 
 ## 第二步：启动 Copilot 并登录 Loki
 
@@ -69,13 +69,14 @@ copilot
 模型条目示例：
 
 ```text
-Claude Opus 5.5 [Loki] · ctx=1,000,000
-GPT-6.1 Sol [Loki] · ctx=1,050,000
+Claude Opus 5.5 [Loki] · ctx=1,000,000 · ~$4.40/$22.00/1M
+GPT-6.1 Sol [Loki] · ctx=1,050,000 · ~$2.20/$11.00/1M
 ```
 
 - **`ctx`** 是 Loki 返回的总上下文窗口 token 上限，不是当前剩余空间。
 - 模型及窗口大小会随服务更新，以上仅为示例。没有返回窗口信息时显示 `ctx=unknown`。
-- 某些 Copilot 版本的原生 `Context` 列仍显示 `—`，可以直接查看模型名称后的 `ctx`。
+- **`~$4.40/$22.00/1M`** 表示每百万 token 的估算美元单价，依次为输入、输出。价格来自当前 Loki 目录，按每个 CopilotCredit 约 $0.01 折算，仅供比较，以服务端账单为准。未提供可识别的价格时显示 `price=unknown`，不当作免费。
+- 原生 `Context`、`Price` 列的展示由 Copilot 决定，可能显示 `—` 或其他计费标记；本扩展将窗口及 Loki 单价直接放在模型名称后，不修改这些原生列。
 - 模型可能位于 `Recent models`、`New models` 或其他分组；直接搜索 `loki` 最方便。
 
 也可以直接指定模型：
@@ -109,9 +110,31 @@ GPT-6.1 Sol [Loki] · ctx=1,050,000
 
 切换成功后重新打开 `/model`，查看该环境的模型。显式选择的环境会被记住，下次启动继续使用；要恢复默认环境，执行 `/loki-endpoint prod`。
 
-### 网页搜索与阅读
+### 在 `/mcp` 中查看网页搜索服务
 
-扩展提供网页搜索和网页正文抓取工具。可以直接要求 Copilot 使用 `loki_web_search` 搜索，或使用 `loki_web_browse` 阅读指定网页。搜索与网页抓取是独立操作。
+完成 `/loki-login` 后输入：
+
+```text
+/mcp
+```
+
+在已安装的服务中找到 **`loki-web`**，确认其已启用并连接。它提供两个工具：
+
+| 工具 | 功能 |
+|---|---|
+| `web` | 搜索网页，返回标题、链接和日期；支持语言、地区及结果数量 |
+| `browse` | 阅读指定网页的文本内容，最多 20,000 字符；可能截断，不保证完整原文 |
+
+可以直接对 Copilot 说：
+
+```text
+请用 loki-web 的 web 工具搜索 TypeScript 的最新发布说明。
+请用 loki-web 的 browse 工具阅读这个网页：https://www.typescriptlang.org/
+```
+
+Copilot 调用时可能将工具名显示为 `loki-web-web`、`loki-web-browse`。搜索与网页抓取是独立操作，不会自动组合。
+
+服务复用 Loki 登录态，每次操作按需获取有效凭证，跟随 `/loki-endpoint` 选择的环境。没有额外 API key，也不需要单独启动代理。你在 `/mcp` 中禁用它后，插件不会强制重新启用。
 
 ## 更新扩展
 
@@ -137,6 +160,12 @@ npm run install:user
 
 等待模型同步完成后，关闭并重新打开 `/model`，在搜索框输入 `loki`。仍看不到时，重启 Copilot，再依次执行 `/loki-login` 和 `/model`。
 
+### `/mcp` 中找不到 `loki-web`，或没有连接
+
+先在源码目录重新执行 `npm install`、`npm run install:user`，然后重启 Copilot，执行 `/loki-login`，再检查 `/mcp`。也可以在 `/mcp` 中重载服务。
+
+若存在另一个手工配置的同名 `loki-web`，安装脚本会拒绝覆盖，请先在 `/mcp` 中处理同名配置。若被你禁用，需要自行启用。
+
 ### 登录失败或请求提示 401
 
 重新执行 `/loki-login`。多账号场景可使用 `/loki-login picker` 选择正确的企业账号。若仍失败，请确认账号有对应环境的服务权限。
@@ -152,4 +181,4 @@ npm run install:user
 - 不需要设置 `COPILOT_LOKI_*`、`COPILOT_PROVIDER_*` 等认证环境变量，也不需要编辑 `providers.json`。
 - 不要将 Loki 指向不可信的自定义服务地址，否则对方会收到令牌和请求内容。
 
-卸载时先关闭 Copilot，再删除 `~/.copilot/extensions/loki`。如需同时清除插件保存的凭证和环境选择，再删除 `~/.copilot/loki-state`。不要删除整个 `~/.copilot` 目录。
+卸载前先在 `/mcp` 中移除 `loki-web` 服务，然后关闭 Copilot，删除 `~/.copilot/extensions/loki`。如需同时清除插件保存的凭证和环境选择，再删除 `~/.copilot/loki-state`。不要删除整个 `~/.copilot` 目录或其他服务的 MCP 配置。

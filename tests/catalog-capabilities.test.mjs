@@ -22,7 +22,7 @@ test("future models and per-model thinking levels are discovered dynamically on 
 	assert.equal(models[0].maxPromptTokens, 983_040);
 	assert.equal(models[0].maxOutputTokens, 65_536);
 	assert.equal(models[0].maxContextWindowTokens, 1_048_576);
-	assert.equal(models[0].name, `${entry.id} [Loki] · ctx=1,048,576`);
+	assert.equal(models[0].name, `${entry.id} [Loki] · ctx=1,048,576 · price=unknown`);
 	assert.deepEqual(await fetchLokiCatalog("TEST_TOKEN"), [], "Removed models must not survive as cached/static entries.");
 	assert.equal(call, 2);
 });
@@ -44,7 +44,23 @@ test("missing upstream window is displayed as unknown, never as the fallback bud
 	}] })));
 	const catalog = await fetchLokiCatalog("TEST_TOKEN");
 	const { models } = buildCopilotProvidersAndModels(catalog, PROD_UPSTREAM);
-	assert.equal(models[0].name, "no-window-model [Loki] · ctx=unknown");
+	assert.equal(models[0].name, "no-window-model [Loki] · ctx=unknown · price=unknown");
+});
+
+test("unknown pricing is not displayed as free and advertised zero pricing remains valid", async (t) => {
+	const billing = [
+		null,
+		{ price_unit: "UnknownUnit", cost_per_input_token: 1, cost_per_output_token: 2 },
+		{ price_unit: "CopilotCredit", cost_per_input_token: 0 },
+		{ price_unit: "CopilotCredit", cost_per_input_token: 0, cost_per_output_token: 0 },
+	];
+	t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ data: billing.map((price, i) => ({
+		id: `pricing-${i}`, supported_endpoints: ["/responses"], billing: price,
+		capabilities: { limits: { max_context_window_tokens: 200_000, max_output_tokens: 20_000 }, supports: {} },
+	})) })));
+	const models = buildCopilotProvidersAndModels(await fetchLokiCatalog("TEST_TOKEN"), PROD_UPSTREAM).models;
+	for (const model of models.slice(0, 3)) assert.ok(model.name.endsWith("price=unknown"));
+	assert.ok(models[3].name.endsWith("~$0.00/$0.00/1M"));
 });
 
 test("prod is the default, with no static model list or competing model-selection command", () => {

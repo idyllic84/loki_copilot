@@ -21,6 +21,16 @@ function formatContextWindowLimit(value) {
 	return Number.isSafeInteger(value) && value > 0 ? value.toLocaleString("en-US") : "unknown";
 }
 
+/** Input/output USD estimate per million tokens, only for the known credit unit. */
+function formatPrice(billing, cost) {
+	const valid = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
+	if (billing?.price_unit !== "CopilotCredit" || !valid(billing.cost_per_input_token) || !valid(billing.cost_per_output_token)) {
+		return "price=unknown";
+	}
+	const usd = (value) => value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+	return `~$${usd(cost.input)}/$${usd(cost.output)}/1M`;
+}
+
 function toUsdPerMillion(billing) {
 	if (!billing) return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 	const factor = CREDIT_TO_USD * 1_000_000;
@@ -41,6 +51,7 @@ function toCatalogItem(entry, baseUrl) {
 	const reasoning = Array.isArray(efforts) && efforts.length > 0;
 	const contextWindow = limits?.max_context_window_tokens ?? 200_000;
 	const cost = toUsdPerMillion(entry.billing);
+	const priceLabel = formatPrice(entry.billing, cost);
 	const displayName = entry.display_name || entry.name || entry.id;
 
 	if (endpoints.includes("/v1/messages")) {
@@ -57,6 +68,7 @@ function toCatalogItem(entry, baseUrl) {
 			reasoningEfforts: efforts,
 			capabilities,
 			cost,
+			priceLabel,
 			supportedEndpoints: endpoints,
 		};
 	}
@@ -76,6 +88,7 @@ function toCatalogItem(entry, baseUrl) {
 			reasoningEfforts: efforts,
 			capabilities,
 			cost,
+			priceLabel,
 			supportedEndpoints: endpoints,
 		};
 	}
@@ -195,7 +208,7 @@ export function buildCopilotProvidersAndModels(catalog, baseUrl, options = {}) {
 			provider: item.provider,
 			wireModel: item.id,
 			modelId: item.id,
-			name: `${item.name} [Loki] · ctx=${formatContextWindowLimit(item.capabilities?.limits?.max_context_window_tokens)}`,
+			name: `${item.name} [Loki] · ctx=${formatContextWindowLimit(item.capabilities?.limits?.max_context_window_tokens)} · ${item.priceLabel ?? "price=unknown"}`,
 			maxContextWindowTokens: item.contextWindow,
 			maxPromptTokens,
 			maxOutputTokens: item.maxTokens,
@@ -211,7 +224,7 @@ export function formatModelsTable(models, baseUrl) {
 	for (const m of models) {
 		const ctx = formatContextWindowLimit(m.capabilities?.limits?.max_context_window_tokens);
 		const maxOut = `${Math.round(m.maxTokens / 1000)}K`;
-		const cost = `$${m.cost.input.toFixed(2)}/$${m.cost.output.toFixed(2)}`;
+		const cost = m.priceLabel ?? "price=unknown";
 		const selectId = `${m.provider}/${m.id}`;
 		lines.push(`  - ${selectId.padEnd(34)} ctx=${ctx.padStart(5)} out=${maxOut.padStart(4)} cost=${cost}`);
 	}
