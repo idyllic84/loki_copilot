@@ -23,17 +23,26 @@ npm run install:user
 
 安装完成后，扩展会安装到 `~/.copilot/extensions/loki`，并自动登记 **`loki-web`** MCP 服务。
 
-## 第二步：启动 Copilot 并先登录
+## 第二步：开启实验性功能并启动 Copilot
 
-启动 Copilot：
+Copilot CLI 的 Extensions 目前属于实验性功能（Experimental Feature），首次使用前需要开启（开启一次后会自动保存在配置中）：
 
 ```powershell
+# 方式一：通过配置命令持久化开启，再启动
+copilot config experimental on
 copilot
+
+# 方式二：首次启动时带上 --experimental（同样会自动保存配置）
+copilot --experimental
 ```
 
-若出现扩展加载确认提示，选择允许加载。
+也可以在已打开的 Copilot 会话中直接执行 `/settings experimental on`（或 `/experimental on`）。
 
-**先在 Copilot 对话框中执行：**
+启动后若弹出扩展权限确认提示，请选择允许（建议选择 **Yes, and always allow**）。可通过 `/extensions manage` 查看 `loki` 是否处于 **running** 状态。
+
+## 第三步：先登录 Loki
+
+**在 Copilot 对话框中执行：**
 
 ```text
 /loki-login
@@ -46,7 +55,7 @@ copilot
 /loki-login picker
 ```
 
-## 第三步：用 `/model` 选择模型和推理强度
+## 第四步：用 `/model` 选择模型和推理强度
 
 登录成功后输入：
 
@@ -107,13 +116,15 @@ npm install
 npm run install:user
 ```
 
-然后在 Copilot 中执行 `/extensions reload` 或重启 Copilot。
+然后在 Copilot 中执行 `/extensions reload`（或 `/clear`）或重启 Copilot。
 
 ## 常见问题
 
 ### `/loki-login` 命令不存在
 
-确认安装时已执行 `npm run install:user`，并重启 Copilot。
+1. 确认已开启实验性功能：在终端执行 `copilot config experimental on`（或在会话中执行 `/settings experimental on`）。
+2. 在会话中执行 `/extensions manage` 检查 `loki` 是否已启用并处于 `running` 状态；若之前将扩展模式设为了禁用，可执行 `/extensions mode` 切换回 **Load & Augment** 或 **Load Only**。
+3. 若首次启动时跳过了扩展权限确认，可重新启动 `copilot`（或启动时加上 `--allow-tool='extension-permission-access(user:loki)'`）。
 
 ### `/model` 菜单里看不到 Loki 模型
 
