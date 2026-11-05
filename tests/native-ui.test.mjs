@@ -48,16 +48,12 @@ test("native /model lists dynamic Loki models and supports Low through Max", { s
 		assert.fail(`Timed out waiting for ${description}; no private terminal transcript is printed.`);
 	};
 	try {
-		let allowed = false;
 		const until = Date.now() + 30_000;
 		while (Date.now() < until) {
 			const current = text();
 			if (current.includes("Would you like to add this key binding")) child.write("\x1b");
 			else if (current.includes('Extension "user:loki" wants elevated permissions')) {
-				// One launch only; do not persist a global permission grant.
-				assert.ok(!allowed, "Unexpected repeated extension permission request.");
-				child.write("\r");
-				allowed = true;
+				assert.fail("The Loki extension must load without an elevated permission prompt.");
 			} else if (current.includes("Interactive") && !current.includes("still waiting on extensions")) {
 				break;
 			}

@@ -230,7 +230,6 @@ session = await joinSession({
 		{
 			name: "loki_quota",
 			description: "Query live Microsoft Loki cloud AI credit quota and usage from GET /quota.",
-			skipPermission: true,
 			parameters: {
 				type: "object",
 				properties: {
@@ -256,7 +255,6 @@ session = await joinSession({
 		{
 			name: "loki_models",
 			description: "Fetch the live model catalog from Microsoft Loki GET /models.",
-			skipPermission: true,
 			parameters: {
 				type: "object",
 				properties: {

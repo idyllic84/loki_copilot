@@ -38,7 +38,7 @@ copilot --experimental
 
 也可以在已打开的 Copilot 会话中直接执行 `/settings experimental on`（或 `/experimental on`）。
 
-启动后若弹出扩展权限确认提示，请选择允许（建议选择 **Yes, and always allow**）。可通过 `/extensions manage` 查看 `loki` 是否处于 **running** 状态。
+开启后，扩展会在所有目录的每个会话中自动加载，无需逐次授权。可通过 `/extensions manage` 查看 `loki` 是否处于 **running** 状态。
 
 ## 第三步：先登录 Loki
 
@@ -124,7 +124,6 @@ npm run install:user
 
 1. 确认已开启实验性功能：在终端执行 `copilot config experimental on`（或在会话中执行 `/settings experimental on`）。
 2. 在会话中执行 `/extensions manage` 检查 `loki` 是否已启用并处于 `running` 状态；若之前将扩展模式设为了禁用，可执行 `/extensions mode` 切换回 **Load & Augment** 或 **Load Only**。
-3. 若首次启动时跳过了扩展权限确认，可重新启动 `copilot`（或启动时加上 `--allow-tool='extension-permission-access(user:loki)'`）。
 
 ### `/model` 菜单里看不到 Loki 模型
 

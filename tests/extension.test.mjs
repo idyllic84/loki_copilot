@@ -158,3 +158,9 @@ test("fetchLokiQuota and WebGrounding tools work with mocked Loki endpoints", as
 	const browseRes = await lokiWebBrowse("TEST_TOKEN", "https://example.com", { baseUrl: PROD_UPSTREAM });
 	assert.equal(browseRes, "Page body");
 });
+
+test("extension tools request no elevated permission, so it loads in every session without a startup prompt", async () => {
+	const { readFile } = await import("node:fs/promises");
+	const source = await readFile(new URL("../extension.mjs", import.meta.url), "utf8");
+	assert.doesNotMatch(source, /skipPermission/);
+});
