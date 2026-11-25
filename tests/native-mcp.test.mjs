@@ -5,19 +5,27 @@ import test from "node:test";
 const enabled = process.env.LOKI_COPILOT_MCP_TEST === "1" && process.env.COPILOT_TEST_CLI && process.env.COPILOT_TEST_SDK;
 test("native MCP connects, survives reload and offers only web/browse", { skip: !enabled, timeout: 90_000 }, async () => {
 	const { CopilotClient, RuntimeConnection } = await import(pathToFileURL(process.env.COPILOT_TEST_SDK).href);
-	const runtime = typeof RuntimeConnection.forSpawnedStdio === "function"
-		? RuntimeConnection.forSpawnedStdio({ path: process.env.COPILOT_TEST_CLI })
-		: RuntimeConnection.forStdio({ path: process.env.COPILOT_TEST_CLI });
-	const client = new CopilotClient({
-		mode: "coding-agent",
-		runtime,
-		logLevel: "error",
-	});
+	const isNewSdk = typeof RuntimeConnection.forSpawnedStdio === "function";
+	const client = new CopilotClient(
+		isNewSdk
+			? {
+					mode: "coding-agent",
+					runtime: RuntimeConnection.forSpawnedStdio({ path: process.env.COPILOT_TEST_CLI }),
+					logLevel: "error",
+				}
+			: {
+					connection: RuntimeConnection.forStdio({ path: process.env.COPILOT_TEST_CLI }),
+					logLevel: "error",
+				},
+	);
 	let session;
 	try {
 		session = await client.createSession({
-			enableExperimentalMode: true, requestExtensions: true,
-			workingDirectory: process.cwd(), onPermissionRequest: () => ({ kind: "approve-once" }),
+			enableExperimentalMode: true,
+			requestExtensions: true,
+			...(isNewSdk ? {} : { enableConfigDiscovery: true }),
+			workingDirectory: process.cwd(),
+			onPermissionRequest: () => ({ kind: "approve-once" }),
 			disabledMcpServers: ["github-mcp-server", "githubiq"],
 		});
 		for (let i = 0; i < 150; i++) {
