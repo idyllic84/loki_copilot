@@ -164,3 +164,14 @@ test("extension tools request no elevated permission, so it loads in every sessi
 	const source = await readFile(new URL("../extension.mjs", import.meta.url), "utf8");
 	assert.doesNotMatch(source, /skipPermission/);
 });
+
+test("joinSession does not pass inference.models (disallowed on extension connections in Copilot CLI >= 1.0.116)", async () => {
+	const { readFile } = await import("node:fs/promises");
+	const source = await readFile(new URL("../extension.mjs", import.meta.url), "utf8");
+	const joinMatch = source.match(/joinSession\(\{([\s\S]*?)\n\}\)/);
+	assert.ok(joinMatch, "Expected joinSession({...}) call in extension.mjs");
+	const joinBody = joinMatch[1];
+	assert.doesNotMatch(joinBody, /\bmodels\s*:/);
+	assert.doesNotMatch(joinBody, /\binference\s*:/);
+	assert.match(source, /session\.rpc\.provider\.sync/);
+});

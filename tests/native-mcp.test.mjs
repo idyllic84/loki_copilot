@@ -5,11 +5,18 @@ import test from "node:test";
 const enabled = process.env.LOKI_COPILOT_MCP_TEST === "1" && process.env.COPILOT_TEST_CLI && process.env.COPILOT_TEST_SDK;
 test("native MCP connects, survives reload and offers only web/browse", { skip: !enabled, timeout: 90_000 }, async () => {
 	const { CopilotClient, RuntimeConnection } = await import(pathToFileURL(process.env.COPILOT_TEST_SDK).href);
-	const client = new CopilotClient({ connection: RuntimeConnection.forStdio({ path: process.env.COPILOT_TEST_CLI }), logLevel: "error" });
+	const runtime = typeof RuntimeConnection.forSpawnedStdio === "function"
+		? RuntimeConnection.forSpawnedStdio({ path: process.env.COPILOT_TEST_CLI })
+		: RuntimeConnection.forStdio({ path: process.env.COPILOT_TEST_CLI });
+	const client = new CopilotClient({
+		mode: "coding-agent",
+		runtime,
+		logLevel: "error",
+	});
 	let session;
 	try {
 		session = await client.createSession({
-			enableExperimentalMode: true, requestExtensions: true, enableConfigDiscovery: true,
+			enableExperimentalMode: true, requestExtensions: true,
 			workingDirectory: process.cwd(), onPermissionRequest: () => ({ kind: "approve-once" }),
 			disabledMcpServers: ["github-mcp-server", "githubiq"],
 		});
@@ -31,6 +38,17 @@ test("native MCP connects, survives reload and offers only web/browse", { skip: 
 		assert.ok(names.includes("loki-web-browse"));
 		assert.ok(!names.includes("loki_web_search"));
 		assert.ok(!names.includes("loki_web_browse"));
+
+		// Verify post-joinSession live Loki model synchronization
+		let lokiModels = [];
+		for (let i = 0; i < 50; i++) {
+			const listed = await session.rpc.model.list({ skipCache: true });
+			const entries = listed.list || listed.models || [];
+			lokiModels = entries.filter((m) => String(m.id || "").startsWith("loki-"));
+			if (lokiModels.length > 0) break;
+			await new Promise((resolve) => setTimeout(resolve, 250));
+		}
+		assert.ok(lokiModels.length > 0, "Expected live Loki models to be synchronized after joinSession.");
 		if (process.env.LOKI_COPILOT_MCP_LIVE_TEST === "1") {
 			const result = await session.rpc.tools.execute({ name: "loki-web-web", arguments: { query: "TypeScript release notes", maxResults: 2, language: "en", region: "US" } });
 			assert.equal(result.resultType, "success");

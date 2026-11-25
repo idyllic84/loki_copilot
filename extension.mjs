@@ -39,29 +39,15 @@ const bearerTokenProvider = async () => {
 	return tok.accessToken;
 };
 
-// Register both auth callbacks even if initial discovery fails. Later refreshes
-// use the same SDK-owned callbacks; no SDK-internal registration APIs are needed.
-let initialProviders = buildCopilotProvidersAndModels([], loadExtensionConfig().endpoint, {
+// Register the BYOK provider connections (with `bearerTokenProvider` callbacks) in
+// `joinSession`, WITHOUT passing `models` (`inference.models` is rejected on extension
+// connections in Copilot CLI >= 1.0.116). Models are synchronized via `session.rpc.provider`
+// once `joinSession` resolves.
+const startupEndpoint = loadExtensionConfig().endpoint;
+const initialProviders = buildCopilotProvidersAndModels([], startupEndpoint, {
 	bearerTokenProvider,
 	conversationId: CONVERSATION_ID,
 }).providers;
-let initialModels = [];
-let startupWarning = null;
-
-try {
-	const cfg = loadExtensionConfig();
-	const tok = await getValidToken(AbortSignal.timeout(25_000));
-	const catalog = await fetchLokiCatalog(tok.accessToken, cfg.endpoint);
-	const built = buildCopilotProvidersAndModels(catalog, cfg.endpoint, {
-		bearerTokenProvider,
-		conversationId: CONVERSATION_ID,
-		forRpcSync: false,
-	});
-	initialProviders = built.providers;
-	initialModels = built.models;
-} catch (err) {
-	startupWarning = err instanceof Error ? err.message : String(err);
-}
 
 let session;
 
@@ -105,7 +91,7 @@ async function syncWebGrounding(options) {
 }
 
 session = await joinSession({
-	...(initialProviders.length > 0 ? { providers: initialProviders, models: initialModels } : {}),
+	providers: initialProviders,
 	commands: [
 		{
 			name: "loki-login",
@@ -282,17 +268,15 @@ session = await joinSession({
 
 await syncWebGrounding({ restart: false });
 
-// Only log after joinSession resolves. No hook or prompt-triggered initialization.
-if (startupWarning) {
-	await session.log(`[loki] No live catalog: ${startupWarning}. Run /loki-login to retry.`, { level: "warning" });
-} else {
-	try {
-		await session.rpc.model.list();
-		await session.log(
-			`[loki] ${initialModels.length} live models loaded from ${formatEndpointLabel(loadExtensionConfig().endpoint)}. Use /model, search Loki; use ←/→ for reasoning effort.`,
-			{ ephemeral: true },
-		);
-	} catch (error) {
-		await session.log(`[loki] Provider registered, but host catalog refresh failed: ${error.message}`, { level: "warning" });
-	}
+// Synchronize the live Loki model catalog after `joinSession` resolves.
+try {
+	const endpoint = loadExtensionConfig().endpoint;
+	const catalog = await syncProvidersAndModels(endpoint);
+	await session.log(
+		`[loki] ${catalog.length} live models loaded from ${formatEndpointLabel(endpoint)}. Use /model, search Loki; use ←/→ for reasoning effort.`,
+		{ ephemeral: true },
+	);
+} catch (err) {
+	const message = err instanceof Error ? err.message : String(err);
+	await session.log(`[loki] No live catalog: ${message}. Run /loki-login to retry.`, { level: "warning" });
 }
